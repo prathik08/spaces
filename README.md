@@ -4,7 +4,7 @@ Upload a photo of a room, pick a vibe and a budget, and get back spatially-aware
 decor suggestions — each one matched to a real shoppable product — plus an
 AI-generated visualization of the room with those suggestions applied.
 
-**[Live demo →](#)** _(add your deployed URL here)_
+**[Live demo →](#)** _(Finish by 9/5)_
 
 > **TODO:** add screenshots — run the app locally, upload a room photo, and
 > capture the input flow and the results/visualization screens into `docs/`,
