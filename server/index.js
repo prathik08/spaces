@@ -17,6 +17,11 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Render (and most PaaS hosts) sit behind a reverse proxy that sets
+// X-Forwarded-For — trust exactly one hop so express-rate-limit reads the
+// real client IP instead of refusing to start.
+app.set('trust proxy', 1);
+
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173', credentials: true }));
 // A save's JSON body carries the room photo (and possibly a visualization
 // image) as data URLs — Express's default 100kb limit is far too small for
