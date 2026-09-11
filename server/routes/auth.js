@@ -11,8 +11,13 @@ import {
 
 const router = express.Router();
 
+// The callback must land on the same public domain the client is served
+// from (proxied back to this server via vercel.json's /api rewrite), not
+// this server's own direct URL — otherwise the session cookie gets set on
+// a different domain than the one later API calls run from, which mobile
+// browsers' cross-site cookie blocking will refuse to send.
 function callbackUrl() {
-  return `${process.env.SERVER_URL || 'http://localhost:3001'}/api/auth/github/callback`;
+  return `${process.env.CLIENT_ORIGIN || 'http://localhost:5173'}/api/auth/github/callback`;
 }
 
 router.get('/auth/github', (req, res) => {

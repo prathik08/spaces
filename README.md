@@ -79,24 +79,32 @@ client-side env config is needed for local dev.
   (register one at github.com/settings/developers — see `.env.example` for
   the exact callback URL it needs)
 - `SESSION_SECRET` — random string for signing session cookies
-- `SERVER_URL` — this server's own public URL (used to build the OAuth
-  callback URL)
 - `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` — where saved analyses live
   (create a project at supabase.com, then run `server/db/schema.sql` once in
   its SQL Editor to create the table)
 
 ## Deployment
 
-This is a two-part deploy: a static client and a small API server.
+This is a two-part deploy — a static client and a small API server — but
+the client proxies all `/api/*` requests through to the server
+(`client/vercel.json`), so the browser only ever sees one origin. This
+matters for auth: without it, the session cookie is cross-site between the
+two domains, which desktop browsers mostly tolerate but mobile browsers
+frequently block outright.
 
-- **Client → Vercel.** Set the project root to `client/`. If the server is
-  hosted elsewhere, set `VITE_API_URL` to its URL (see `client/.env.example`).
-- **Server → Render** (or any Node host). Set `CLIENT_ORIGIN` to the deployed
-  client's URL, `SERVER_URL` to the server's own URL, `NODE_ENV=production`
-  (needed for the session cookie to work cross-site), and add all the env
-  vars above. You'll need a **second GitHub OAuth App** for production —
-  each OAuth App only supports one callback URL, so the local-dev one won't
-  work here. The Supabase project/table can be shared between local dev and
+- **Server → Render** (or any Node host). Set `CLIENT_ORIGIN` to the
+  deployed *client's* URL, `NODE_ENV=production` (needed for the session
+  cookie's secure/cross-site settings), and the env vars above.
+- **Client → Vercel.** Set the project root to `client/`. Leave
+  `VITE_API_URL` unset — update `client/vercel.json`'s rewrite destination
+  to point at your Render URL instead.
+- The GitHub OAuth App's **Authorization callback URL** must be the
+  *client's* domain (`https://your-client.vercel.app/api/auth/github/callback`),
+  not the server's — that's what makes the session cookie land on the
+  right origin. You'll need a **second OAuth App** for production; each one
+  only supports a single callback URL, so the local-dev app (pointed at
+  `localhost:5173`) can't double as the production one.
+- The Supabase project/table can be shared between local dev and
   production — just add the same `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`
   to Render's environment variables.
 

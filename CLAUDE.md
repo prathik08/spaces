@@ -29,8 +29,7 @@ Copy `.env.example` to `server/.env` and fill in:
 - `ANTHROPIC_API_KEY` — for Claude analysis, item detection, and visualization prompts
 - `FAL_KEY` — for fal.ai image generation (~$0.04–0.08/image)
 - `SERPAPI_KEY` — for Google Shopping product search (`/api/products`)
-- `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` — GitHub OAuth App credentials (see `.env.example` for how to register one)
-- `SERVER_URL` — this server's own public URL, used to build the OAuth callback URL
+- `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` — GitHub OAuth App credentials (see `.env.example` for how to register one — its callback URL is the CLIENT's domain, not this server's)
 - `SESSION_SECRET` — random string used to sign session cookies
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — saved-analyses storage (run `server/db/schema.sql` once in the Supabase SQL Editor to create the table)
 - `PORT=3001`, `CLIENT_ORIGIN=http://localhost:5173`
@@ -46,6 +45,8 @@ The server (`/server/index.js`) is an Express app with ES modules. Routes are th
 ### Auth
 
 Every route that calls a metered API (`/api/analyze`, `/api/visualize`, `/api/detect-items`, `/api/products`) is gated behind GitHub OAuth via `requireAuth` (`middleware/requireAuth.js`) — any signed-in GitHub account is accepted, there's no allowlist. `routes/auth.js` handles the OAuth redirect/callback and issues a signed JWT in an httpOnly cookie (`services/authService.js`); the client checks `/api/auth/me` on load and shows `components/SignIn.jsx` when unauthenticated. This exists specifically so a shared/public link can't be used to run up the API bill anonymously — the per-IP rate limiter below is a second layer on top of it, not a replacement.
+
+In production, `client/vercel.json` proxies all `/api/*` requests through to the server, and `callbackUrl()` in `routes/auth.js` builds the OAuth redirect using `CLIENT_ORIGIN`, not the server's own URL — both exist so the session cookie ends up first-party to the client's domain instead of cross-site. Skipping the proxy (e.g. pointing the client directly at the server via `VITE_API_URL`) makes the cookie cross-site, which desktop browsers mostly tolerate but mobile browsers routinely block, breaking sign-in silently (GitHub auth succeeds, but `/api/auth/me` never sees the cookie afterward).
 
 `/api/saves` (`routes/saves.js` → `services/savesService.js`) is also behind `requireAuth`, since saves are owned by `req.user.login` — every query/mutation filters on `owner`, so one GitHub user can never read or touch another's rows even though the server uses Supabase's `service_role` key (which otherwise bypasses RLS entirely). Saves cap at 5 per owner, oldest pruned on insert, matching the previous localStorage behavior.
 
