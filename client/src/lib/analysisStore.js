@@ -2,63 +2,88 @@
  * analysisStore — all analysis persistence lives here.
  *
  * Analysis shape:
- *   { id, savedAt, vibe, budget, imageUrl, vizUrl, results }
+ *   { id, savedAt, vibe, budget, imageUrl, vizUrl, results, snapshots, refinementHistory }
  *
- *   imageUrl / vizUrl are opaque URL strings — data URLs today, Supabase Storage URLs tomorrow.
+ *   imageUrl / vizUrl are opaque URL strings — compressed data URLs stored in the DB row.
  *   results shape: { roomAnalysis, suggestions[], paintColors[] }
  *
- * Today: localStorage.
- * Supabase swap: replace read/write with Supabase Postgres queries.
- *   list()   → supabase.from('analyses').select('*').order('saved_at', { ascending: false })
- *   save()   → supabase.from('analyses').insert({ ...entry })
- *   update() → supabase.from('analyses').update(patch).eq('id', id)
- *   remove() → supabase.from('analyses').delete().eq('id', id)
- *   Make each function async and add `await` at the call sites in useSavedAnalyses.
+ * Backed by the server's /api/saves routes (server/services/savesService.js),
+ * which store each row in Supabase Postgres keyed by the signed-in GitHub
+ * login. Requires an authenticated session — call sites should only use this
+ * once signed in.
  */
 
-const KEY = 'spaces_saved';
-const MAX = 5;
+import { apiFetch } from './api';
 
-function migrate(entry) {
-  // One-time rename from old field names to current schema
-  const out = { ...entry };
-  if (!out.imageUrl && out.imagePreview) { out.imageUrl = out.imagePreview; delete out.imagePreview; }
-  if (!out.vizUrl   && out.vizImage)     { out.vizUrl   = out.vizImage;     delete out.vizImage;     }
-  return out;
-}
+const LEGACY_KEY = 'spaces_saved';
 
-function read() {
+function readLegacy() {
   try {
-    const raw = JSON.parse(localStorage.getItem(KEY)) || [];
-    const migrated = raw.map(migrate);
-    if (JSON.stringify(raw) !== JSON.stringify(migrated)) {
-      localStorage.setItem(KEY, JSON.stringify(migrated));
-    }
-    return migrated;
+    const raw = JSON.parse(localStorage.getItem(LEGACY_KEY)) || [];
+    // One-time rename from even older field names, carried over from the
+    // pre-server localStorage schema.
+    return raw.map((entry) => {
+      const out = { ...entry };
+      if (!out.imageUrl && out.imagePreview) { out.imageUrl = out.imagePreview; delete out.imagePreview; }
+      if (!out.vizUrl && out.vizImage) { out.vizUrl = out.vizImage; delete out.vizImage; }
+      return out;
+    });
+  } catch {
+    return [];
   }
-  catch { return []; }
 }
 
-function write(arr) {
-  try { localStorage.setItem(KEY, JSON.stringify(arr)); }
-  catch { console.warn('analysisStore: localStorage quota exceeded — save skipped'); }
+export async function list() {
+  const res = await apiFetch('/api/saves');
+  if (!res.ok) throw new Error('Failed to load saved analyses');
+  const { saves } = await res.json();
+  return saves;
 }
 
-export function list() {
-  return read();
+export async function save(analysis) {
+  const res = await apiFetch('/api/saves', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(analysis),
+  });
+  if (!res.ok) throw new Error('Failed to save analysis');
+  const { save: created } = await res.json();
+  return created.id;
 }
 
-export function save(analysis) {
-  const id = Date.now();
-  const entry = { id, savedAt: new Date().toISOString(), ...analysis };
-  write([entry, ...read()].slice(0, MAX));
-  return id;
+export async function update(id, patch) {
+  const res = await apiFetch(`/api/saves/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error('Failed to update saved analysis');
 }
 
-export function update(id, patch) {
-  write(read().map((s) => (s.id === id ? { ...s, ...patch } : s)));
+export async function remove(id) {
+  const res = await apiFetch(`/api/saves/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to delete saved analysis');
 }
 
-export function remove(id) {
-  write(read().filter((s) => s.id !== id));
+// One-time migration for anyone who had saves from before server-side
+// storage existed: push what's in localStorage into their account, then
+// clear it so this only ever runs once per browser.
+export async function migrateLegacySaves() {
+  const legacy = readLegacy();
+  if (!legacy.length) return;
+
+  // Oldest first, so re-saving through save() (which prepends) ends up in
+  // the same newest-first order they were in before.
+  for (const entry of [...legacy].reverse()) {
+    await save({
+      vibe: entry.vibe,
+      budget: entry.budget,
+      imageUrl: entry.imageUrl,
+      vizUrl: entry.vizUrl,
+      results: entry.results,
+      snapshots: entry.snapshots,
+      refinementHistory: entry.refinementHistory,
+    }).catch(() => {}); // best-effort — one bad legacy row shouldn't block the rest
+  }
+  localStorage.removeItem(LEGACY_KEY);
 }

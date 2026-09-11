@@ -8,5 +8,8 @@ export function apiUrl(path) {
 }
 
 export function apiFetch(path, options) {
-  return fetch(apiUrl(path), options);
+  // The session cookie is set by the server's GitHub OAuth callback; 'include'
+  // is required for it to travel cross-origin (client and server are on
+  // different domains in production).
+  return fetch(apiUrl(path), { credentials: 'include', ...options });
 }

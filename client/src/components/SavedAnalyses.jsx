@@ -508,7 +508,7 @@ export default function SavedAnalyses({ saves, onRemove, onUpdate }) {
       patch.refinementHistory = [...(entry?.refinementHistory || []), refinementText];
     }
 
-    onUpdate(id, patch);
+    await onUpdate(id, patch);
   };
 
   const openView = (id, refine = false) => {

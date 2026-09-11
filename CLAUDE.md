@@ -29,6 +29,10 @@ Copy `.env.example` to `server/.env` and fill in:
 - `ANTHROPIC_API_KEY` — for Claude analysis, item detection, and visualization prompts
 - `FAL_KEY` — for fal.ai image generation (~$0.04–0.08/image)
 - `SERPAPI_KEY` — for Google Shopping product search (`/api/products`)
+- `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` — GitHub OAuth App credentials (see `.env.example` for how to register one)
+- `SERVER_URL` — this server's own public URL, used to build the OAuth callback URL
+- `SESSION_SECRET` — random string used to sign session cookies
+- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — saved-analyses storage (run `server/db/schema.sql` once in the Supabase SQL Editor to create the table)
 - `PORT=3001`, `CLIENT_ORIGIN=http://localhost:5173`
 
 **Never expose or log `server/.env` contents.**
@@ -38,6 +42,12 @@ Copy `.env.example` to `server/.env` and fill in:
 The client (`/client/src/App.jsx`) owns all state and orchestrates a multi-step flow: upload → detect → configure → analyze → visualize. Vite proxies all `/api/*` requests to the server at port 3001 (`vite.config.js`).
 
 The server (`/server/index.js`) is an Express app with ES modules. Routes are thin — they handle multipart uploads (multer, 10 MB limit), then delegate to services.
+
+### Auth
+
+Every route that calls a metered API (`/api/analyze`, `/api/visualize`, `/api/detect-items`, `/api/products`) is gated behind GitHub OAuth via `requireAuth` (`middleware/requireAuth.js`) — any signed-in GitHub account is accepted, there's no allowlist. `routes/auth.js` handles the OAuth redirect/callback and issues a signed JWT in an httpOnly cookie (`services/authService.js`); the client checks `/api/auth/me` on load and shows `components/SignIn.jsx` when unauthenticated. This exists specifically so a shared/public link can't be used to run up the API bill anonymously — the per-IP rate limiter below is a second layer on top of it, not a replacement.
+
+`/api/saves` (`routes/saves.js` → `services/savesService.js`) is also behind `requireAuth`, since saves are owned by `req.user.login` — every query/mutation filters on `owner`, so one GitHub user can never read or touch another's rows even though the server uses Supabase's `service_role` key (which otherwise bypasses RLS entirely). Saves cap at 5 per owner, oldest pruned on insert, matching the previous localStorage behavior.
 
 ### Request flow for a full analysis
 
@@ -51,7 +61,7 @@ The server (`/server/index.js`) is an Express app with ES modules. Routes are th
 
 5. **`POST /api/visualize`** (`routes/visualize.js`) → `services/visualizationService.js` — two-step process: Claude (`claude-opus-4-8`) writes a precise edit instruction from the photo + suggestion list, then an image model edits the actual room photo. Tries `openai/gpt-image-2/edit` first (via fal.ai) when product reference photos are available, falling back to `fal-ai/flux-pro/kontext/max/multi`, then `fal-ai/flux-pro/kontext` (single-image, text-only) if no product photos exist. Returns base64 JPEG.
 
-6. **`POST /api/convert-image`** (`routes/convert.js`) — converts HEIC/HEIF uploads to JPEG via sharp before the client re-submits.
+6. **`POST /api/convert-image`** (`routes/convert.js`) — converts HEIC/HEIF uploads to JPEG via `heic-convert` (bundles its own WASM decoder) before the client re-submits. `sharp`'s bundled libheif can't decode real iPhone photos — they're HEVC-compressed, and prebuilt `sharp`/libvips binaries exclude HEVC decoding for licensing reasons.
 
 ### Image handling
 

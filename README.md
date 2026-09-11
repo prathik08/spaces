@@ -33,6 +33,10 @@ AI-generated visualization of the room with those suggestions applied.
    treats prior requirements as non-negotiable constraints, not suggestions to
    revisit.
 
+Every step that calls a paid API is gated behind **GitHub sign-in** — any
+GitHub account works, there's no allowlist — plus a per-IP rate limit, so a
+shared link can't be used to run up the bill anonymously.
+
 ## Tech stack
 
 | | |
@@ -42,8 +46,9 @@ AI-generated visualization of the room with those suggestions applied.
 | Room analysis, item detection, image-edit prompts | Claude (Opus + Haiku) via `@anthropic-ai/sdk` |
 | Room visualization | fal.ai (GPT Image 2 / FLUX Kontext) |
 | Product search | SerpAPI (Google Shopping) |
-| Image normalization | sharp (HEIC/TIFF/etc. → JPEG) |
-| Persistence | localStorage (client-side only, last 5 analyses) |
+| Image normalization | sharp (general formats) + heic-convert (real iPhone HEIC/HEVC photos) |
+| Auth | GitHub OAuth, signed JWT in an httpOnly cookie |
+| Persistence | Supabase (Postgres) — saved analyses, keyed by GitHub login, last 5 per user |
 
 ## Running locally
 
@@ -65,11 +70,20 @@ npm run dev
 Open `http://localhost:5173`. Vite proxies `/api/*` to the server, so no
 client-side env config is needed for local dev.
 
-### Required API keys (`server/.env`)
+### Required env vars (`server/.env`)
 
 - `ANTHROPIC_API_KEY` — Claude analysis, item detection, visualization prompts
 - `FAL_KEY` — fal.ai image generation (~$0.04–0.08/image)
 - `SERPAPI_KEY` — Google Shopping product search
+- `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — GitHub OAuth App credentials
+  (register one at github.com/settings/developers — see `.env.example` for
+  the exact callback URL it needs)
+- `SESSION_SECRET` — random string for signing session cookies
+- `SERVER_URL` — this server's own public URL (used to build the OAuth
+  callback URL)
+- `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` — where saved analyses live
+  (create a project at supabase.com, then run `server/db/schema.sql` once in
+  its SQL Editor to create the table)
 
 ## Deployment
 
@@ -78,19 +92,31 @@ This is a two-part deploy: a static client and a small API server.
 - **Client → Vercel.** Set the project root to `client/`. If the server is
   hosted elsewhere, set `VITE_API_URL` to its URL (see `client/.env.example`).
 - **Server → Render** (or any Node host). Set `CLIENT_ORIGIN` to the deployed
-  client's URL and add the three API keys above as environment variables.
+  client's URL, `SERVER_URL` to the server's own URL, `NODE_ENV=production`
+  (needed for the session cookie to work cross-site), and add all the env
+  vars above. You'll need a **second GitHub OAuth App** for production —
+  each OAuth App only supports one callback URL, so the local-dev one won't
+  work here. The Supabase project/table can be shared between local dev and
+  production — just add the same `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`
+  to Render's environment variables.
 
 The two costly routes (`/api/analyze`, `/api/visualize`) are rate-limited
-per-IP (10 requests/hour) since they call metered APIs — worth knowing if
-you're testing against a live deployment rather than localhost.
+per-IP (10 requests/hour) on top of the GitHub sign-in gate, since they call
+metered APIs — worth knowing if you're testing against a live deployment
+rather than localhost.
 
 ## Known limitations
 
-- Persistence is localStorage only (last 5 analyses, per browser) — there's
-  no backend database. The storage layer (`client/src/lib/analysisStore.js`,
-  `storageAdapter.js`) is written to swap in a real backend later without
-  touching call sites.
-- No auth — anyone with the deployed URL can use it, subject to the rate limit
-  above.
+- Saved analyses cap at 5 per user (oldest gets pruned on save), same as the
+  old localStorage limit — images are stored as compressed data URLs directly
+  in the Postgres row rather than in object storage, which is simple but
+  won't scale indefinitely; a Supabase Storage bucket would be the next step
+  if row sizes become a problem.
+- Auth is a sign-in gate (any GitHub account), not a real accounts system —
+  there's no admin controls beyond the shared per-IP rate limit and the
+  5-saves-per-user cap.
+- Anyone with saves from before this feature existed (still sitting in that
+  browser's localStorage) gets them migrated into their account automatically
+  on next sign-in — see `migrateLegacySaves()` in `analysisStore.js`.
 - Free-tier hosting (e.g. Render) spins down after inactivity — the first
   request after idle can take 30–50s to cold-start.

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import ImageUpload from './components/ImageUpload';
 import VibeSelector from './components/VibeSelector';
 import BudgetSelector from './components/BudgetSelector';
@@ -6,6 +6,7 @@ import LoadingState from './components/LoadingState';
 import DecorResults from './components/DecorResults';
 import ContextInput from './components/ContextInput';
 import SavedAnalyses from './components/SavedAnalyses';
+import SignIn from './components/SignIn';
 import { useSavedAnalyses } from './hooks/useSavedAnalyses';
 import { saveImage } from './lib/storageAdapter';
 import { apiFetch } from './lib/api';
@@ -69,7 +70,25 @@ export default function App() {
   const [results, setResults] = useState(null);
   const [error, setError] = useState(null);
   const [currentSaveId, setCurrentSaveId] = useState(null);
-  const { saves, save, update, remove } = useSavedAnalyses();
+  const [user, setUser] = useState(undefined); // undefined = checking, null = signed out
+  const [authError, setAuthError] = useState(false);
+  const { saves, save, update, remove } = useSavedAnalyses(!!user);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('auth_error')) {
+      setAuthError(true);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    apiFetch('/api/auth/me')
+      .then((res) => (res.ok ? res.json() : { user: null }))
+      .then((data) => setUser(data.user))
+      .catch(() => setUser(null));
+  }, []);
+
+  const handleLogout = async () => {
+    await apiFetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    setUser(null);
+  };
 
   const handleSubmit = async () => {
     if (!image || !vibe) return;
@@ -127,7 +146,7 @@ export default function App() {
       setStage('results');
 
       const imageUrl = await saveImage(imagePreview, { maxWidth: 1400, quality: 0.85 });
-      const id = save({ vibe, budget, imageUrl, results: mergedResults, vizUrl: null });
+      const id = await save({ vibe, budget, imageUrl, results: mergedResults, vizUrl: null });
       setCurrentSaveId(id);
     } catch (err) {
       setError(err.message);
@@ -138,7 +157,7 @@ export default function App() {
   const handleVizGenerated = async (vizImage) => {
     if (!currentSaveId) return;
     const vizUrl = await saveImage(vizImage, { maxWidth: 1400, quality: 0.85 });
-    update(currentSaveId, { vizUrl });
+    await update(currentSaveId, { vizUrl });
   };
 
   const handleReset = () => {
@@ -180,10 +199,20 @@ export default function App() {
           <h1>Spaces</h1>
         </div>
         <p>Upload your room, pick a vibe, get spatially-aware design suggestions</p>
+
+        {user && (
+          <div className="user-badge">
+            <img src={user.avatarUrl} alt="" />
+            <span>{user.login}</span>
+            <button onClick={handleLogout}>Sign out</button>
+          </div>
+        )}
       </header>
 
       <main className="main">
-        {stage === 'input' && (
+        {user === null && <SignIn error={authError} />}
+
+        {user && stage === 'input' && (
           <>
             <ImageUpload
               imagePreview={imagePreview}
@@ -280,9 +309,9 @@ export default function App() {
           </>
         )}
 
-        {stage === 'loading' && <LoadingState />}
+        {user && stage === 'loading' && <LoadingState />}
 
-        {stage === 'results' && results && (
+        {user && stage === 'results' && results && (
           <DecorResults
             results={results}
             imagePreview={imagePreview}
@@ -295,7 +324,7 @@ export default function App() {
           />
         )}
 
-        <SavedAnalyses saves={saves} onRemove={remove} onUpdate={update} />
+        {user && <SavedAnalyses saves={saves} onRemove={remove} onUpdate={update} />}
       </main>
     </div>
   );

@@ -1,25 +1,42 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import * as store from '../lib/analysisStore';
 
-export function useSavedAnalyses() {
-  const [saves, setSaves] = useState(() => store.list());
+// `enabled` should track whether there's a signed-in session — the /api/saves
+// routes require auth, so there's nothing to fetch (and nothing to migrate)
+// until then.
+export function useSavedAnalyses(enabled) {
+  const [saves, setSaves] = useState([]);
 
-  const refresh = () => setSaves(store.list());
+  const refresh = useCallback(async () => {
+    try {
+      setSaves(await store.list());
+    } catch {
+      // leave saves as-is; the UI just won't reflect a failed refresh
+    }
+  }, []);
 
-  const save = (analysis) => {
-    const id = store.save(analysis);
-    refresh();
+  useEffect(() => {
+    if (!enabled) {
+      setSaves([]);
+      return;
+    }
+    store.migrateLegacySaves().finally(refresh);
+  }, [enabled, refresh]);
+
+  const save = async (analysis) => {
+    const id = await store.save(analysis);
+    await refresh();
     return id;
   };
 
-  const update = (id, patch) => {
-    store.update(id, patch);
-    refresh();
+  const update = async (id, patch) => {
+    await store.update(id, patch);
+    await refresh();
   };
 
-  const remove = (id) => {
-    store.remove(id);
-    refresh();
+  const remove = async (id) => {
+    await store.remove(id);
+    await refresh();
   };
 
   return { saves, save, update, remove };
