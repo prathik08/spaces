@@ -84,7 +84,7 @@ Also suggest exactly 2 wall paint colors that would complete the "${vibe}" look 
 
 Respond ONLY with valid JSON — no markdown, no code fences, nothing outside the JSON:
 {
-  "roomAnalysis": "2–3 sentence spatial description based on the image and depth data",
+  "roomAnalysis": "2–3 sentence spatial description based on the image",
   "suggestions": [
     {
       "item": "item name",
