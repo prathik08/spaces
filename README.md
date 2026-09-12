@@ -6,9 +6,6 @@ AI-generated visualization of the room with those suggestions applied.
 
 **[Live demo →](https://spaces-nine.vercel.app)**
 
-> **TODO:** add screenshots — run the app locally, upload a room photo, and
-> capture the input flow and the results/visualization screens into `docs/`,
-> then embed them here with `![Results screen](docs/screenshot-results.png)`.
 
 ## How it works
 
@@ -85,7 +82,7 @@ client-side env config is needed for local dev.
 
 ## Deployment
 
-This is a two-part deploy — a static client and a small API server — but
+This is a two-part deploy: S static client and a small API server — but
 the client proxies all `/api/*` requests through to the server
 (`client/vercel.json`), so the browser only ever sees one origin. This
 matters for auth: without it, the session cookie is cross-site between the
@@ -115,16 +112,9 @@ rather than localhost.
 
 ## Known limitations
 
-- Saved analyses cap at 5 per user (oldest gets pruned on save), same as the
-  old localStorage limit — images are stored as compressed data URLs directly
-  in the Postgres row rather than in object storage, which is simple but
-  won't scale indefinitely; a Supabase Storage bucket would be the next step
-  if row sizes become a problem.
+
 - Auth is a sign-in gate (any GitHub account), not a real accounts system —
   there's no admin controls beyond the shared per-IP rate limit and the
   5-saves-per-user cap.
-- Anyone with saves from before this feature existed (still sitting in that
-  browser's localStorage) gets them migrated into their account automatically
-  on next sign-in — see `migrateLegacySaves()` in `analysisStore.js`.
 - Free-tier hosting (e.g. Render) spins down after inactivity — the first
   request after idle can take 30–50s to cold-start.
