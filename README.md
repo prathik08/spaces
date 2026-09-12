@@ -15,8 +15,7 @@ AI-generated visualization of the room with those suggestions applied.
    vibe** (Cozy, Japandi, Dark Academia, etc.), and **set a budget**.
 3. **Claude (Opus) analyzes the photo** and returns 6 specific decor
    suggestions — each with placement, reasoning, a spatial-fit rating
-   (good / tight / warning), and a price estimate — plus 2 real paint colors
-   (Sherwin-Williams / Benjamin Moore) that suit the room and vibe.
+   (good / tight / warning), and a price estimate.
 4. **Product search** runs each suggestion through Google Shopping (SerpAPI)
    and attaches a real product photo, price, and retailer link, falling back
    to constructed Amazon/Wayfair/Target search links when nothing relevant
@@ -31,8 +30,7 @@ AI-generated visualization of the room with those suggestions applied.
    revisit.
 
 Every step that calls a paid API is gated behind **GitHub sign-in** — any
-GitHub account works, there's no allowlist — plus a per-IP rate limit, so a
-shared link can't be used to run up the bill anonymously.
+GitHub account works, there's no allowlist — plus a per-IP rate limit.
 
 ## Tech stack
 
@@ -106,9 +104,7 @@ frequently block outright.
   to Render's environment variables.
 
 The two costly routes (`/api/analyze`, `/api/visualize`) are rate-limited
-per-IP (10 requests/hour) on top of the GitHub sign-in gate, since they call
-metered APIs — worth knowing if you're testing against a live deployment
-rather than localhost.
+per-IP (10 requests/hour).
 
 ## Known limitations
 
