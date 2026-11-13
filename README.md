@@ -80,7 +80,7 @@ client-side env config is needed for local dev.
 
 ## Deployment
 
-This is a two-part deploy: S static client and a small API server — but
+This is a two-part deploy: a static client and a small API server — but
 the client proxies all `/api/*` requests through to the server
 (`client/vercel.json`), so the browser only ever sees one origin. This
 matters for auth: without it, the session cookie is cross-site between the
