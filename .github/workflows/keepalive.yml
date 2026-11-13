@@ -1,0 +1,23 @@
+name: Keep Supabase project active
+
+# Supabase's free tier auto-pauses a project after ~a week with no API
+# activity, which breaks saved analyses until someone notices and manually
+# restores it from the dashboard (see git history for the incident this
+# fixes). Pinging GET /api/health every 3 days — well under that threshold —
+# does one cheap Supabase read, which counts as activity and resets the
+# inactivity clock. If this job fails, GitHub emails the repo owner by
+# default, which doubles as the alerting this setup otherwise lacks.
+on:
+  schedule:
+    - cron: '0 12 */3 * *'
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping server health endpoint
+        run: |
+          # --max-time accounts for Render's free-tier cold start (the
+          # server spins down after 15min idle and can take 30-50s to wake).
+          curl -sf --max-time 90 https://spaces-server-fl0x.onrender.com/api/health

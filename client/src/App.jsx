@@ -69,6 +69,7 @@ export default function App() {
   const [stage, setStage] = useState('input');
   const [results, setResults] = useState(null);
   const [error, setError] = useState(null);
+  const [saveError, setSaveError] = useState(null);
   const [currentSaveId, setCurrentSaveId] = useState(null);
   const [user, setUser] = useState(undefined); // undefined = checking, null = signed out
   const [authError, setAuthError] = useState(false);
@@ -95,6 +96,7 @@ export default function App() {
 
     setStage('loading');
     setError(null);
+    setSaveError(null);
 
     const formData = new FormData();
     formData.append('image', image);
@@ -103,6 +105,7 @@ export default function App() {
     if (userContext.trim()) formData.append('userContext', userContext.trim());
     if (typeof budget === 'number') formData.append('budget', budget);
 
+    let mergedResults;
     try {
       const res = await apiFetch('/api/analyze', { method: 'POST', body: formData });
 
@@ -133,7 +136,7 @@ export default function App() {
         }
       } catch (_) {}
 
-      const mergedResults = {
+      mergedResults = {
         ...analysisData,
         suggestions: analysisData.suggestions.map((s, i) => ({
           ...s,
@@ -144,20 +147,34 @@ export default function App() {
 
       setResults(mergedResults);
       setStage('results');
+    } catch (err) {
+      setError(err.message);
+      setStage('input');
+      return;
+    }
 
+    // Saving is best-effort: the analysis already succeeded (and cost real
+    // money), so a failed save must never throw the user back to the form.
+    try {
       const imageUrl = await saveImage(imagePreview, { maxWidth: 1400, quality: 0.85 });
       const id = await save({ vibe, budget, imageUrl, results: mergedResults, vizUrl: null });
       setCurrentSaveId(id);
     } catch (err) {
-      setError(err.message);
-      setStage('input');
+      console.error('Save failed:', err);
+      setSaveError(err.message);
     }
   };
 
   const handleVizGenerated = async (vizImage) => {
     if (!currentSaveId) return;
-    const vizUrl = await saveImage(vizImage, { maxWidth: 1400, quality: 0.85 });
-    await update(currentSaveId, { vizUrl });
+    try {
+      const vizUrl = await saveImage(vizImage, { maxWidth: 1400, quality: 0.85 });
+      await update(currentSaveId, { vizUrl });
+    } catch (err) {
+      // The visualization itself succeeded — don't report it as a failure.
+      console.error('Saving visualization failed:', err);
+      setSaveError(err.message);
+    }
   };
 
   const handleReset = () => {
@@ -310,6 +327,12 @@ export default function App() {
         )}
 
         {user && stage === 'loading' && <LoadingState />}
+
+        {user && stage === 'results' && saveError && (
+          <div className="error-box">
+            Your results are below, but they couldn't be saved to your account ({saveError}).
+          </div>
+        )}
 
         {user && stage === 'results' && results && (
           <DecorResults

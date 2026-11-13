@@ -11,6 +11,14 @@ function supabaseClient() {
   return _supabase;
 }
 
+// Trivial read used by the /api/health keepalive route — see
+// routes/health.js and .github/workflows/keepalive.yml for why this exists.
+export async function ping() {
+  const { error } = await supabaseClient().from(TABLE).select('id').limit(1);
+  if (error) throw new Error(error.message);
+  return true;
+}
+
 function toClientShape(row) {
   return {
     id: row.id,

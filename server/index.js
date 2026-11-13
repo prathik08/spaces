@@ -10,6 +10,7 @@ import detectRouter from './routes/detect.js';
 import convertRouter from './routes/convert.js';
 import productsRouter from './routes/products.js';
 import savesRouter from './routes/saves.js';
+import healthRouter from './routes/health.js';
 import { requireAuth } from './middleware/requireAuth.js';
 
 dotenv.config();
@@ -60,6 +61,7 @@ app.use('/api', detectRouter);
 app.use('/api', convertRouter);
 app.use('/api', productsRouter);
 app.use('/api', savesRouter);
+app.use('/api', healthRouter);
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);

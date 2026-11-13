@@ -64,6 +64,8 @@ In production, `client/vercel.json` proxies all `/api/*` requests through to the
 
 6. **`POST /api/convert-image`** (`routes/convert.js`) — converts HEIC/HEIF uploads to JPEG via `heic-convert` (bundles its own WASM decoder) before the client re-submits. `sharp`'s bundled libheif can't decode real iPhone photos — they're HEVC-compressed, and prebuilt `sharp`/libvips binaries exclude HEVC decoding for licensing reasons.
 
+7. **`GET /api/health`** (`routes/health.js`) — unauthenticated, does one cheap Supabase read. Exists only so `.github/workflows/keepalive.yml` (a scheduled GitHub Action, every 3 days) can ping it and keep the Supabase free-tier project from auto-pausing after ~a week of no API activity. A paused project makes every `/api/saves` call fail with a 500 until someone manually restores it from the Supabase dashboard.
+
 ### Image handling
 
 `utils/normalizeImage.js` (sharp) normalizes uploads to JPEG before any Claude or fal.ai call.
